@@ -1,0 +1,13 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+lib/Test/Directory.pm
+lib/Test/Directory/Extra.pm
+t/basic.t
+t/builder.t
+t/extra.t
+t/template.t
+t/unique.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
