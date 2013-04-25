@@ -4,33 +4,33 @@ use strict;
 use warnings;
 
 use Carp;
+use Fcntl;
 use File::Spec;
+use File::Temp;
 use Test::Builder::Module;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 our @ISA = 'Test::Builder::Module';
 
 ##############################
 # Constructor / Destructor
 ##############################
 
+my $template = 'test-directory-tmp-XXXXX';
+
 sub new {
     my $class = shift;
     my $dir = shift;
     my %opts = @_;
 
-
-    $opts{unique} = 1 unless defined $opts{unique};
-    $dir = File::Spec->join(split '/', $dir);
-
-    if ($opts{unique}) {
-	mkdir $dir or croak "Failed to create '$dir': $!";
+    if (defined $dir) {
+      $dir = File::Spec->join(split '/', $dir);
+      mkdir $dir or croak "Failed to create '$dir': $!";
     } else {
-	mkdir $dir;
-	croak "$dir: $!" unless -d $dir;
+      $dir = File::Temp->newdir( $template, CLEANUP=>0, DIR=>'.' )->dirname;
     };
+
     my %self = (dir => $dir);
-    $self{template} = $opts{template} if defined $opts{template};
     bless \%self, $class;
 }
 
@@ -46,9 +46,6 @@ sub name {
     my ($self,$path) = @_;
     my @path = split /\//, $path;
     my $file = pop @path;
-    if (ref($self) and defined($self->{template})) {
-      $file = sprintf($self->{template}, $file);
-    };
     return @path ? File::Spec->catfile(@path,$file) : $file;
 };
 
@@ -61,20 +58,24 @@ sub path {
 
 
 sub touch {
-    my $self = shift;
-    foreach my $file (@_) {
-	open my($fh), '>', $self->path($file);
-	$self->{files}{$file} = 1;
-    };
+  my $self = shift;
+  foreach my $file (@_) {
+    my $path = $self->path($file);
+    sysopen my($fh), $path, O_WRONLY|O_CREAT|O_EXCL
+      or croak "$path: $!";
+    $self->{files}{$file} = 1;
+  };
 };
 
 sub create {
   my ($self, $file, %opt) = @_;
   my $path = $self->path($file);
-
-  open my($fh), '>', $path or croak "$path: $!";
+  
+  sysopen my($fh), $path, O_WRONLY|O_CREAT|O_EXCL
+    or croak "$path: $!";
+  
   $self->{files}{$file} = 1;
-
+  
   if (defined $opt{content}) {
     print $fh $opt{content};
   };
@@ -193,25 +194,25 @@ sub remove_directories {
 
 sub has {
     my ($self,$file,$text) = @_;
-    $text = "File $file is found." unless defined $text;
+    $text = "Has file $file." unless defined $text;
     $self->builder->ok( $self->check_file($file), $text );
 }
 
 sub hasnt {
     my ($self,$file,$text) = @_;
-    $text = "File $file is not found." unless defined $text;
+    $text = "Doesn't have file $file." unless defined $text;
     $self->builder->ok( not($self->check_file($file)), $text );
 }
 
 sub has_dir {
     my ($self,$file,$text) = @_;
-    $text = "Directory $file is found." unless defined $text;
+    $text = "Has directory $file." unless defined $text;
     $self->builder->ok( $self->check_directory($file), $text );
 }
 
 sub hasnt_dir {
     my ($self,$file,$text) = @_;
-    $text = "Directory $file is not found." unless defined $text;
+    $text = "Doesn't have directory $file." unless defined $text;
     $self->builder->ok( not($self->check_directory($file)), $text );
 }
 
@@ -250,7 +251,7 @@ sub is_ok {
 	push @unknown, $file;
     }
 
-    my $rv = $test->ok((@miss+@unknown) == 0, $name);
+    my $rv = $test->ok((@miss+@unknown+@miss_d) == 0, $name);
     unless ($rv) {
 	$test->diag("Missing file: $_") foreach @miss;
 	$test->diag("Missing directory: $_") foreach @miss_d;
@@ -312,15 +313,14 @@ scope; see the I<clean> method below for details.
 
 =over
 
-=item B<new>(I<$path> [,I<$options>])
+=item B<new>([I<$path>, I<$options>, ...])
 
 Create a new instance pointing to the specified I<$path>. I<$options> is 
 an optional hashref of options.
 
-I<$path> will be created (or the constructor will die).  By default,
-I<$options>->{unique} is true, so it is an error for I<$path> to already
-exist; setting this option to false will allow reusing an existing
-directory.
+I<$path> will be created (or the constructor will die).  If I<$path> is
+undefined, a unique path will be automatically generated; otherwise it is an
+error for I<$path> to already exist.
 
 =back
 
@@ -357,14 +357,14 @@ Create the specified I<$directory>; dies if I<mkdir> fails.
 =item B<name>(I<$file>)
 
 Returns the name of the I<$file>, relative to the directory; including any
-template substitutions.  I<$file> need not exist.  This method is used
+seperator normalization.  I<$file> need not exist.  This method is used
 internally by most other methods to translate file paths.
 
 For portability, this method implicitly splits the path on UNIX-style /
 seperators, and rejoins it with the local directory seperator.
 
-Absent any template or seperator substitution, the returned value would be
-equivalent to I<$file>.
+Absent any seperator substitution, the returned value would be equivalent to
+I<$file>.
 
 =item B<path>(I<$file>)
 

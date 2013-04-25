@@ -1,10 +1,14 @@
-use Test::More tests => 2;
-use lib '.';
+use Test::More tests => 5;
+use Test::Exception;
 use constant MODULE => 'Test::Directory';
 
 use_ok(MODULE);
 
-my $d='tmp-td';
+my $explicit = MODULE->new('explicit');
+is ($explicit->path, 'explicit', 'got explicit path');
+ok ( -d 'explicit', 'Explicit dir exists' );
 
-my $td = MODULE->new($d, template=>'dsc_%0.4d.jpg');
-is ($td->name(123), 'dsc_0123.jpg', 'template looks like camera file');
+my $implicit = MODULE->new;
+like($implicit->path, qr/^test-directory-/, 'got implicit path');
+ok ( -d $implicit->path, 'Implicit dir exists');
+
