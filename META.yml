@@ -21,4 +21,4 @@ no_index:
 requires: {}
 resources:
   repository: https://github.com/sanbeg/Test-Directory
-version: 0.040
+version: 0.041
